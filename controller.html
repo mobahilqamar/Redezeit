@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Redezeit Controller</title>
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at top, rgba(39, 118, 89, 0.8), transparent 38%),
+        linear-gradient(135deg, #05281f, #103d31 50%, #06221c);
+      color: #e4b66b;
+      font-family: Arial, Helvetica, sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+
+    .panel {
+      width: 460px;
+      max-width: 100%;
+      padding: 30px;
+      border: 4px solid #b9823a;
+      border-radius: 26px;
+      background: rgba(5, 38, 30, 0.94);
+      box-shadow: 0 0 35px rgba(185, 130, 58, 0.35), inset 0 0 30px rgba(255,255,255,0.04);
+      text-align: center;
+    }
+
+    h1 {
+      margin: 0 0 20px;
+      color: #f0c982;
+      font-size: 32px;
+      font-weight: 400;
+      letter-spacing: 1px;
+    }
+
+    .time {
+      height: 92px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 72px;
+      font-weight: 800;
+      color: #f6d38b;
+      margin: 20px 0;
+      letter-spacing: 3px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .inputs {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 12px;
+      color: #f0c982;
+      font-size: 18px;
+    }
+
+    input {
+      width: 88px;
+      padding: 12px 8px;
+      font-size: 22px;
+      text-align: center;
+      border-radius: 12px;
+      border: 2px solid #b9823a;
+      background: #082d25;
+      color: #f6d38b;
+      outline: none;
+    }
+
+    button {
+      width: 100%;
+      padding: 15px;
+      margin-top: 12px;
+      font-size: 19px;
+      border-radius: 14px;
+      border: 2px solid #b9823a;
+      background: #0b3a30;
+      color: #f6d38b;
+      cursor: pointer;
+      font-weight: 700;
+      letter-spacing: 0.4px;
+    }
+
+    button:hover { background: #145747; }
+
+    .row {
+      display: flex;
+      gap: 12px;
+    }
+
+    .row button { flex: 1; }
+
+    .danger { background: #681b1b; }
+    .danger:hover { background: #942525; }
+
+    .hint {
+      margin-top: 20px;
+      padding-top: 18px;
+      border-top: 1px solid rgba(185,130,58,0.45);
+      font-size: 13px;
+      line-height: 1.55;
+      color: #d9bf8e;
+      text-align: left;
+    }
+
+    code {
+      color: #ffe0a3;
+      word-break: break-all;
+    }
+  </style>
+</head>
+<body>
+  <div class="panel">
+    <h1>Redezeit Controller</h1>
+
+    <div class="inputs">
+      <input id="minutes" type="number" value="2" min="0" /> Min
+      <input id="seconds" type="number" value="0" min="0" max="59" /> Sek
+    </div>
+
+    <div id="display" class="time">02:00</div>
+
+    <button onclick="setTimer()">Zeit setzen</button>
+
+    <div class="row">
+      <button onclick="startTimer()">Start</button>
+      <button onclick="pauseTimer()">Pause</button>
+    </div>
+
+    <div class="row">
+      <button onclick="resumeTimer()">Weiter</button>
+      <button class="danger" onclick="resetTimer()">Reset</button>
+    </div>
+
+    <div class="hint">
+      <b>StreamDeck URLs:</b><br>
+      <code>controller.html?action=start</code><br>
+      <code>controller.html?action=pause</code><br>
+      <code>controller.html?action=resume</code><br>
+      <code>controller.html?action=reset</code>
+    </div>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+  <script src="firebase-config.js"></script>
+  <script src="shared.js"></script>
+  <script>
+    let localData = null;
+
+    timerRef.on("value", snapshot => {
+      localData = snapshot.val();
+      if (!localData) {
+        timerRef.set({ duration: 120, remaining: 120, status: "idle", startedAt: null });
+        return;
+      }
+      syncInputs(localData.duration || 120);
+      updateDisplay();
+    });
+
+    function syncInputs(duration) {
+      if (document.activeElement === document.getElementById("minutes") || document.activeElement === document.getElementById("seconds")) return;
+      document.getElementById("minutes").value = Math.floor(duration / 60);
+      document.getElementById("seconds").value = duration % 60;
+    }
+
+    function updateDisplay() {
+      if (!localData) return;
+      document.getElementById("display").innerText = formatTime(getRemainingSeconds(localData));
+    }
+
+    setInterval(updateDisplay, 300);
+
+    function getInputDuration() {
+      const min = Math.max(0, parseInt(document.getElementById("minutes").value || 0));
+      const sec = Math.max(0, parseInt(document.getElementById("seconds").value || 0));
+      return min * 60 + sec;
+    }
+
+    function setTimer() {
+      const duration = getInputDuration();
+      timerRef.set({ duration, remaining: duration, status: "idle", startedAt: null });
+    }
+
+    function startTimer() {
+      const duration = getInputDuration();
+      timerRef.set({ duration, remaining: duration, status: "running", startedAt: Date.now() });
+    }
+
+    function pauseTimer() {
+      if (!localData) return;
+      timerRef.update({ remaining: getRemainingSeconds(localData), status: "paused", startedAt: null });
+    }
+
+    function resumeTimer() {
+      if (!localData) return;
+      const remaining = localData.remaining ?? localData.duration ?? 120;
+      timerRef.update({ status: "running", startedAt: Date.now() - ((localData.duration - remaining) * 1000) });
+    }
+
+    function resetTimer() {
+      const duration = localData?.duration || getInputDuration();
+      timerRef.set({ duration, remaining: duration, status: "idle", startedAt: null });
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    const action = params.get("action");
+
+    setTimeout(() => {
+      if (action === "start") startTimer();
+      if (action === "pause") pauseTimer();
+      if (action === "resume") resumeTimer();
+      if (action === "reset") resetTimer();
+      if (action === "set") setTimer();
+    }, 800);
+  </script>
+</body>
+</html>
